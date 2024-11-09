@@ -233,10 +233,13 @@ const MapView = () => {
                         });
 
                         // 添加到图片数组
-                        newImages.push({ imageUrl, year, marker });
+                        newImages.push({ imageUrl, year, marker, createDateTime });
 
                         // 更新状态
-                        setImages((prevImages) => [...prevImages, ...newImages]);
+                        setImages((prevImages) => {
+                            const sortedImages = [...prevImages, ...newImages].sort((a, b) => new Date(a.createDateTime) - new Date(b.createDateTime));
+                            return sortedImages;
+                        });
 
                         // 更新年份列表
                         const newYears = new Set(newImages.map((img) => img.year));
