@@ -1,5 +1,5 @@
 const URL = {
-  domain: "http://localhost:6000/",
+  domain: "http://localhost:8000/",
 };
 
 export default URL;
