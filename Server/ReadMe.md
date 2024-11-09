@@ -11,8 +11,14 @@
 
 ```shell
 npm run start
-brew services start mongodb-community@8.0 // 启动
+https://blog.csdn.net/feixin369/article/details/141205298
+mongod --fork -dbpath data --logpath log/mongo.log --logappend
+```
 
-brew services stop mongodb-community@8.0 // 停止
+数据查询
+```shell
+mongosh
+use map_trace
+db.users.find()
 ```
 

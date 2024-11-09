@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const connectDB = require('./db');
 const User = require('./user');
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 6000;
 
 // 连接数据库
 connectDB();
@@ -21,7 +21,7 @@ app.post('/api/register', async (req, res) => {
     res.status(201).send({ message: 'User registered successfully' });
   } catch (err) {
     console.error(err);
-    res.status(500).send({ message: 'Server error' });
+    res.status(500).send({ message: 'Register Error' });
   }
 });
 
@@ -38,7 +38,7 @@ app.post('/api/login', async (req, res) => {
     }
   } catch (err) {
     console.error(err);
-    res.status(500).send({ message: 'Server error' });
+    res.status(500).send({ message: '登陆失败，请检查账户名以及密码' });
   }
 });
 
