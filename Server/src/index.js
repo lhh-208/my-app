@@ -2,19 +2,25 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const connectDB = require('./db');
-const User = require('./user');
+const User = require('./User');
+const cors = require('cors'); // 引入 cors
 const app = express();
-const PORT = process.env.PORT || 6000;
+const PORT = process.env.PORT || 8000;
 
 // 连接数据库
 connectDB();
 
+app.use(cors()); // 使用 cors 中间件
 app.use(express.json());
 
 // 注册路由
 app.post('/api/register', async (req, res) => {
   const { username, password } = req.body;
   try {
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).send({ message: 'Username already exists' });
+    }
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({ username, password: hashedPassword });
     await user.save();
@@ -30,15 +36,17 @@ app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   try {
     const user = await User.findOne({ username });
-    if (user && await bcrypt.compare(password, user.password)) {
-      const token = jwt.sign({ username }, 'your_jwt_secret', { expiresIn: '1h' });
+    if (user && (await bcrypt.compare(password, user.password))) {
+      const token = jwt.sign({ username }, 'your_jwt_secret', {
+        expiresIn: '1h',
+      });
       res.send({ message: 'Login successful', token });
     } else {
-      res.status(401).send({ message: 'Invalid credentials' });
+      res.status(401).send({ message: '登陆失败，请检查账户名以及密码' });
     }
   } catch (err) {
     console.error(err);
-    res.status(500).send({ message: '登陆失败，请检查账户名以及密码' });
+    res.status(500).send({ message: '账户异常' });
   }
 });
 
