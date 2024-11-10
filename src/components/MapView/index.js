@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from "react";
 import * as exifr from "exifr";
+import { Input, Select, message } from "antd";
+
+const { Option } = Select;
 
 const styles = {
   mapContainer: {
@@ -8,22 +11,20 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: -1, // 确保地图在输入框下面
+    zIndex: 0, // 确保地图在输入框下面
   },
   fileInputContainer: {
     display: "flex",
     width: "300px",
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    position: "absolute",
+    position: "absolute", // 改为相对定位
+    backgroundColor: "white",
     top: "10px",
     left: "10px",
-    zIndex: 10, // 确保输入框在地图上面
-    backgroundColor: "white",
     padding: "10px",
     borderRadius: "5px",
     boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+    marginBottom: "10px", // 添加底部外边距
+    zIndex: 10, // 确保输入框在地图上面
   },
   fileInput: {
     width: "70%",
@@ -35,9 +36,6 @@ const styles = {
     cursor: "pointer",
     transition: "border-color 0.3s",
   },
-  fileInputHover: {
-    borderColor: "#888",
-  },
   yearSelector: {
     padding: "3px",
     borderRadius: "5px",
@@ -45,9 +43,6 @@ const styles = {
     fontSize: "16px",
     cursor: "pointer",
     transition: "border-color 0.3s",
-  },
-  yearSelectorHover: {
-    borderColor: "#888",
   },
   modal: {
     display: "flex",
@@ -85,7 +80,6 @@ const styles = {
   },
 };
 
-// 用于将度分秒转换为十进制
 const getDecimalFromDMS = (dms, direction) => {
   const degrees = dms[0];
   const minutes = dms[1] / 60;
@@ -94,7 +88,21 @@ const getDecimalFromDMS = (dms, direction) => {
   return direction === "S" || direction === "W" ? -decimal : decimal;
 };
 
-// WGS-84 转 GCJ-02
+const Modal = ({ imageUrl, onClose }) => (
+  <div style={styles.modal} onClick={onClose}>
+    <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+      <button style={styles.closeButton} onClick={onClose}>
+        关闭
+      </button>
+      <img
+        src={imageUrl}
+        alt="Large view"
+        style={{ maxWidth: "100%", maxHeight: "100%" }}
+      />
+    </div>
+  </div>
+);
+
 const wgs84ToGcj02 = (lat, lon) => {
   const pi = 3.1415926535897932384626;
   const a = 6378245.0;
@@ -158,21 +166,6 @@ const wgs84ToGcj02 = (lat, lon) => {
   return { lat: lat + dLat, lon: lon + dLon };
 };
 
-const Modal = ({ imageUrl, onClose }) => (
-  <div style={styles.modal} onClick={onClose}>
-    <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-      <button style={styles.closeButton} onClick={onClose}>
-        关闭
-      </button>
-      <img
-        src={imageUrl}
-        alt="Large view"
-        style={{ maxWidth: "100%", maxHeight: "100%" }}
-      />
-    </div>
-  </div>
-);
-
 const MapView = () => {
   const [map, setMap] = useState(null);
   const [modalImageUrl, setModalImageUrl] = useState(null);
@@ -181,141 +174,105 @@ const MapView = () => {
   const [selectedYear, setSelectedYear] = useState("All");
 
   useEffect(() => {
-    // 确保高德地图API已加载
     if (window.AMap) {
-      // 创建地图实例
-
       const initialMap = new window.AMap.Map("map", {
-        center: [104.1954, 35.8617], // 中国的中心点
+        center: [104.1954, 35.8617],
         zoom: 5,
-        zooms: [3, 18], // 设置地图缩放级别范围
-        resizeEnable: true, // 允许调整大小
       });
 
       setMap(initialMap);
 
-      // 清理函数
       return () => {
         initialMap.destroy();
       };
     }
   }, []);
 
-  const handleFilesChange = (event) => {
+  const handleFilesChange = async (event) => {
     const files = event.target.files;
     const newImages = [];
     let processedFiles = 0;
 
-    // 过滤掉无法正常读取的文件
     const validFiles = Array.from(files).filter(
       (file) => file.type.startsWith("image/") && file.size > 0
     );
 
-    // 遍历选择的文件
-    validFiles.forEach((file, index) => {
-      // 使用 FileReader 读取图片文件
-      const reader = new FileReader();
+    for (const file of validFiles) {
+      try {
+        const imageUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (error) => reject(error);
+          reader.readAsDataURL(file);
+        });
 
-      reader.onload = async (e) => {
-        const imageUrl = e.target.result;
+        const allMetaData = await exifr.parse(file);
+        const lat = allMetaData.latitude;
+        const lon = allMetaData.longitude;
+        const dateTimeOriginal = allMetaData.DateTimeOriginal;
+        const createDateTime = allMetaData.CreateDate;
+        console.log("-----");
+        console.log(allMetaData);
 
-        try {
-          // 使用 exifr 获取图像的经纬度和拍摄时间
-          const allMetaData = await exifr.parse(file);
-          const lat = allMetaData.latitude;
-          const lon = allMetaData.longitude;
-          const dateTimeOriginal = allMetaData.DateTimeOriginal;
-          const createDateTime = allMetaData.CreateDate;
-          console.log("-----");
-          console.log(allMetaData);
+        if (lat && lon) {
+          const latDecimal = lat;
+          const lonDecimal = lon;
+          const { lat: gcjLat, lon: gcjLon } = wgs84ToGcj02(
+            latDecimal,
+            lonDecimal
+          );
+          const position = [gcjLon, gcjLat];
 
-          // 如果有经纬度信息，则在地图上添加缩略图
-          if (lat && lon) {
-            const latDecimal = lat;
-            const lonDecimal = lon;
-            // 转换为 GCJ-02 坐标
-            const { lat: gcjLat, lon: gcjLon } = wgs84ToGcj02(
-              latDecimal,
-              lonDecimal
-            );
-            const position = [gcjLon, gcjLat];
-
-            // 获取拍摄年份
-            let year = "Unknown";
-            if (dateTimeOriginal && typeof dateTimeOriginal === "string") {
-              year = dateTimeOriginal.split(" ")[0].split(":")[0];
-            }
-
-            // 添加标记
-            const marker = new window.AMap.Marker({
-              position: position,
-              map: map,
-            });
-
-            // 添加信息窗体
-            const infoWindow = new window.AMap.InfoWindow({
-              content: `<img src="${imageUrl}" alt="Image" style="width: 100px; height: auto; cursor: pointer;" />`,
-              offset: new window.AMap.Pixel(0, -30),
-            });
-            marker.on("click", () => {
-              infoWindow.open(map, marker.getPosition());
-              map.setZoomAndCenter(15, position); // 放大并定位到标记位置
-            });
-
-            // 点击图片时打开模态框
-            infoWindow.on("open", () => {
-              const img = document.querySelector(".amap-info-content img");
-              if (img) {
-                img.addEventListener("click", () => {
-                  setModalImageUrl(imageUrl);
-                });
-              }
-            });
-
-            // 添加到图片数组
-            newImages.push({ imageUrl, year, marker, createDateTime });
-
-            // 更新状态
-            setImages((prevImages) => {
-              const sortedImages = [...prevImages, ...newImages].sort(
-                (a, b) =>
-                  new Date(a.createDateTime) - new Date(b.createDateTime)
-              );
-              return sortedImages;
-            });
-
-            // 更新年份列表
-            const newYears = new Set(newImages.map((img) => img.year));
-            setYears((prevYears) =>
-              Array.from(new Set([...prevYears, ...newYears]))
-            );
-          } else {
-            console.warn(`文件 ${file.name} 没有包含经纬度信息！`);
+          let year = "Unknown";
+          if (dateTimeOriginal && typeof dateTimeOriginal === "string") {
+            year = dateTimeOriginal.split(" ")[0].split(":")[0];
           }
-        } catch (error) {
-          console.error(`处理文件 ${file.name} 时出错:`, error);
-        } finally {
-          // 处理完成的文件计数
-          processedFiles += 1;
 
-          // 如果所有文件都处理完成，定位到最后一个标记的位置
-          if (processedFiles === validFiles.length) {
-            const lastImage = newImages[newImages.length - 1];
-            if (lastImage) {
-              setTimeout(() => {
-                map.setZoomAndCenter(15, lastImage.marker.getPosition());
+          const marker = new window.AMap.Marker({
+            position: position,
+            map: map,
+          });
+
+          const infoWindow = new window.AMap.InfoWindow({
+            content: `<img src="${imageUrl}" alt="Image" style="width: 100px; height: auto; cursor: pointer;" />`,
+            offset: new window.AMap.Pixel(0, -30),
+          });
+          marker.on("click", () => {
+            infoWindow.open(map, marker.getPosition());
+            map.setZoomAndCenter(15, position);
+          });
+
+          infoWindow.on("open", () => {
+            const img = document.querySelector(".amap-info-content img");
+            if (img) {
+              img.addEventListener("click", () => {
+                setModalImageUrl(imageUrl);
               });
             }
-          }
-        }
-      };
+          });
 
-      reader.onerror = (error) => {
-        console.error(`读取文件 ${file.name} 时出错:`, error);
-        // 处理完成的文件计数
+          newImages.push({ imageUrl, year, marker, createDateTime });
+
+          setImages((prevImages) => {
+            const sortedImages = [...prevImages, ...newImages].sort(
+              (a, b) => new Date(a.createDateTime) - new Date(b.createDateTime)
+            );
+            return sortedImages;
+          });
+
+          const newYears = new Set(newImages.map((img) => img.year));
+          setYears((prevYears) =>
+            Array.from(new Set([...prevYears, ...newYears]))
+          );
+        } else {
+          console.warn(`文件 ${file.name} 没有包含经纬度信息！`);
+        }
+      } catch (error) {
+        console.error(`处理文件 ${file.name} 时出错:`, error);
+        message.error(`处理文件 ${file.name} 时出错`);
+      } finally {
         processedFiles += 1;
 
-        // 如果所有文件都处理完成，定位到最后一个标记的位置
         if (processedFiles === validFiles.length) {
           const lastImage = newImages[newImages.length - 1];
           if (lastImage) {
@@ -324,22 +281,15 @@ const MapView = () => {
             });
           }
         }
-      };
-
-      reader.readAsDataURL(file);
-    });
-
-    // 重置 input 的值，以便可以继续上传
-    event.target.value = "";
+      }
+    }
   };
 
-  const handleYearChange = (event) => {
-    const year = event.target.value;
-    setSelectedYear(year);
+  const handleYearChange = (value) => {
+    setSelectedYear(value);
 
-    // 过滤并展示对应年份的图片
     images.forEach((img) => {
-      if (year === "All" || img.year === year) {
+      if (value === "All" || img.year === value) {
         img.marker.show();
       } else {
         img.marker.hide();
@@ -349,22 +299,28 @@ const MapView = () => {
 
   return (
     <div>
-      <div style={styles.fileInputContainer}>
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={handleFilesChange}
-          style={styles.fileInput}
-        />
-        <select onChange={handleYearChange} style={styles.yearSelector}>
-          <option value="All">全部年份</option>
-          {years.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
+      <div style={{ zIndex: 10 }}>
+        <div style={styles.fileInputContainer}>
+          <Input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFilesChange}
+            style={styles.fileInput}
+          />
+          <Select
+            defaultValue="All"
+            style={{ width: 120, marginLeft: 10 }}
+            onChange={handleYearChange}
+          >
+            <Option value="All">全部年份</Option>
+            {years.map((year) => (
+              <Option key={year} value={year}>
+                {year}
+              </Option>
+            ))}
+          </Select>
+        </div>
       </div>
 
       <div id="map" style={styles.mapContainer} />
